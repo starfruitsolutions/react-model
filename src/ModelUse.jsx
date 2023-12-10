@@ -1,63 +1,81 @@
 import {createModel} from './Model';
 
-/* creates a model */
+/**
+*   Just wrap a standard javascript object in `createModel`,
+*   and you're good to go. All of the properties become reactive
+*   state automatically, and you get back a custom hook to use.
+*   This can be used in multiple components with no props or
+*   context wrapper. It can be exported and used by components
+*   anywhere, with no need to pass any around anything else.
+*   Update it from anywhere and it will rerender dependent components.
+*   You can also keep it in its own file and update it directly, outside
+*   of any react component.
+**/
+
 const useTodoModel = createModel({
-	todos: ['todo 1', 'todo 2', 'todo 3'],
+	todos: [],
 	todo: 'test todo',
 	setTodo(value) {
 		console.log('this', this)
 		this.todo = value;
 	},
-	async addTodo(todo) {
-		this.todos = [...this.todos, todo];
+	addTodo() {
+		this.todos = [...this.todos, this.todo];
+		this.todo = '';
+	},
+	clearTodos() {
+		this.todos = [];
 	}
 }, { debug: true });
 
 
+// example of updating the model outside a component
+useTodoModel.getModel().todos = ['My todo'];
+
 function ModelUse() {
-	console.log('render all');
 	return (
 		<div className="App">
 			<Model />
-			<Watch />
 			<Pick />
 		</div>
 	);
 }
 
-/* returns the model but doesn't trigger re-render */
 function Model() {
-	console.log('render model');
-	const model = useTodoModel().watch();
+	/**
+	*   If no "watch" array is provided it rerenders on all model property changes.
+	*   If it is provided, it only triggers a render for the properties specified.
+	*   If an empty array is provided, it doesn't trigger a render at all, but you
+	*   can still use the functions, triggering renders elsewhere.
+	**/
+	const model = useTodoModel(['todo']);
 	return (
 		<div>
+			{/* This is a button to test re-rendering. */}
 			<button onClick={()=>model.todo = 'test todo'}>Test Re-Render</button>
 			<h2>model</h2>
-			{model.todo}<br />
+			{/* Notice that we can set the property directly without any helper functions */}
 			<input type="text" value={model.todo} onChange={(e) => model.todo = e.target.value} /><br />
 		</div>
 	)
 }
 
-/* returns whole model and only triggers rerender for state in the array */
-function Watch() {
-	console.log('render watch');
-	const model = useTodoModel(true).watch(['todo']);
-	return (
-		<div>
-			<h2>Watch</h2>
-			{model.todo}<br />
-			<input type="text" value={model.todo} onChange={(e) => model.todo = e.target.value } /><br />
-		</div>
-	)
-}
-
-/* returns an array of the picked properties and only rerenders on changes to their state */
 function Pick() {
-	console.log('render pick');
-	const { todo, setTodoDirectly } = useTodoModel().pick({ todo: (model) => model.todo, setTodoDirectly: (model) => (value) => model.todo = value });
-	const setTodoByMethod = useTodoModel().pick('setTodo');
-	const todos = useTodoModel().pick((model) => model.todos );
+	/**
+	 * `.pick()` lets you pick elements of the model or register functions executed against the model.
+	 * It will automatically watch all dependencies and trigger rerender when any change to a dependency occurs.
+	 * You can pass it a propery key, a function, or a collection of strings and functions as an array or object
+	 * Collections will be returned in the same format as the collection you passed in
+	**/
+
+	// single picks
+	const todo = useTodoModel.pick('todo');
+	const todos = useTodoModel.pick((model) => model.todos);
+
+	// collection picks
+	const [ setTodoUsingModelMethod, setTodoUsingCallback ] = useTodoModel.pick(['setTodo', (model) => (value) => model.todo = value]);
+	const { addTodo, clearTodos } = useTodoModel.pick({ addTodo: 'addTodo', clearTodos: 'clearTodos' });
+
 
 	return (
 		<div>
@@ -65,9 +83,10 @@ function Pick() {
 			<ul>
 				{todos.map((todo, index) => <li key={index}>{todo}</li>)}
 			</ul>
-			{todo}<br />
-			<input type="text" value={todo} onChange={(e) => setTodoByMethod(e.target.value)} /><br />
-			<input type="text" value={todo} onChange={(e) => setTodoDirectly(e.target.value)} /><br />
+			<input type="text" value={todo} onChange={(e) => setTodoUsingModelMethod(e.target.value)} /><br />
+			<input type="text" value={todo} onChange={(e) => setTodoUsingCallback(e.target.value)} /><br />
+			<button onClick={() => addTodo()}>Add</button>
+			<button onClick={() => clearTodos()}>Clear Todos</button>
 		</div>
 	)
 }
