@@ -2,19 +2,17 @@ import {createModel} from './Model';
 import './App.css';
 
 /* creates a model */
-const TodoModel = createModel({
+const useTodoModel = createModel({
 	todos: ['todo 1', 'todo 2', 'todo 3'],
 	todo: 'test todo',
 	setTodo(value) {
+		console.log('this', this)
 		this.todo = value;
 	},
 	async addTodo(todo) {
 		this.todos = [...this.todos, todo];
 	}
 }, { debug: true });
-
-/* generates a custom hook for the model */
-const useTodoModel = TodoModel.getHook();
 
 
 function App() {
@@ -45,7 +43,7 @@ function Model() {
 /* returns whole model and only triggers rerender for state in the array */
 function Watch() {
 	console.log('render watch');
-	const model = useTodoModel().watch(['todo']);
+	const model = useTodoModel(true).watch(['todo']);
 	return (
 		<div>
 			<h2>Watch</h2>
