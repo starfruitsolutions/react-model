@@ -28,7 +28,7 @@ function ModelUse() {
 /* returns the model but doesn't trigger re-render */
 function Model() {
 	console.log('render model');
-	const model = useTodoModel();
+	const model = useTodoModel().watch();
 	return (
 		<div>
 			<button onClick={()=>model.todo = 'test todo'}>Test Re-Render</button>
