@@ -155,5 +155,11 @@ class Model {
 
 export function createModel(initialObject, options) {
 	const model = new Model(initialObject, options);
-	return () => model;
+	function methods (keys) {
+		return model.watch(keys);
+	}
+	methods.pick = (args) => model.pick(args);
+	methods.getModel = () => model;
+	return methods;
+
 }
