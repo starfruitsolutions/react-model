@@ -1,5 +1,4 @@
 import {createModel} from './Model';
-import './App.css';
 
 /* creates a model */
 const useTodoModel = createModel({
@@ -15,7 +14,7 @@ const useTodoModel = createModel({
 }, { debug: true });
 
 
-function App() {
+function ModelUse() {
 	console.log('render all');
 	return (
 		<div className="App">
@@ -73,4 +72,4 @@ function Pick() {
 	)
 }
 
-export default App;
+export default ModelUse;
