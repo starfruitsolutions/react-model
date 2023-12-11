@@ -30,7 +30,7 @@ const useTodoModel = createModel({
 
 
 // example of updating the model outside a component
-useTodoModel.getModel().todos = ['My todo'];
+useTodoModel.get().todos = ['My todo'];
 
 function ModelUse() {
 	return (
@@ -73,8 +73,14 @@ function Pick() {
 	const todos = useTodoModel.pick((model) => model.todos);
 
 	// collection picks
-	const [ setTodoUsingModelMethod, setTodoUsingCallback ] = useTodoModel.pick(['setTodo', (model) => (value) => model.todo = value]);
-	const { addTodo, clearTodos } = useTodoModel.pick({ addTodo: 'addTodo', clearTodos: 'clearTodos' });
+	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel.pick([
+		'setTodo',
+		(model) => (value) => model.todo = value
+	]);
+	const { addTodo, clearTodos } = useTodoModel.pick({
+		addTodo: 'addTodo',
+		clearTodos: 'clearTodos'
+	});
 
 
 	return (
