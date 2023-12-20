@@ -1,5 +1,14 @@
 import { useSyncExternalStore } from 'react';
 
+class ModelError extends Error {
+	constructor(message) {
+		super(message);
+		this.name = "ModelError";
+		// keep the stack trace from litering the console it doesn't contain useful information and can be expanded regardless
+		this.stack = this.stack.split('\n')[0];
+	}
+}
+
 /**
  * Wraps a standard javascript object in a reactive model and exposes hooks for react
  * The model can be used in multiple components with no props or context wrapper
@@ -69,7 +78,7 @@ class Model {
 	 * @private
 	 * */
 	subscribe(key, listener) {
-		if (this.#listeners[key] === undefined) throw new Error(`Invalid Key: ${key}. Key does not exist in the model`);
+		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
 
 		this.#listeners[key].add(listener);
 
@@ -84,20 +93,21 @@ class Model {
 	 * @private
 	 * */
 	#sync(key) {
-		if (this[key] === undefined) throw new Error(`Invalid Key: ${key}. Key does not exist in the model`);
+		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
+		if (typeof this[key] === 'function') return;
 		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this[key]); // eslint-disable-line
 	}
 
 	/**
 	 * React hook that watches for model property changes to the specified keys and triggers rerender when any change occurs
-	 * If no key array is provided, watch all properties
-	 * if an empty array is provided, watch no properties
+	 * If used without an array it rerenders on all model property changes.
+	 * used with an array, it only triggers a render for the properties specified.
 	 * @param {array} keys - an array of model keys to watch
 	 * @returns {Model} - the model instance
 	 */
 	watch(keys) {
 		// validate keys
-		if (!(keys === undefined || Array.isArray(keys))) throw new Error('Watch requires an array of model keys');
+		if (!(keys === undefined || Array.isArray(keys))) throw new ModelError('Watch requires an array of model keys');
 
 		// if no keys are provided, watch all properties
 		keys = keys ?? Object.keys(this.#listeners);
@@ -134,7 +144,7 @@ class Model {
 				return this.#pickObject(arg);
 
 			default:
-				throw new Error('Pick requires a model key string, function, or array/object containing a collection of keys and functions');
+				throw new ModelError('Pick requires a model key string, function, or array/object containing a collection of keys and functions');
 		}
 	}
 
@@ -153,7 +163,7 @@ class Model {
 				return this.#pickFunction(pick);
 
 			default:
-				throw new Error('Pick requires a model key string or function');
+				throw new ModelError('Pick requires a model key string or function');
 		}
 	}
 
@@ -179,15 +189,20 @@ class Model {
 	#pickFunction(callback) {
 
 		// clone our object to track property access
-		const testObject = { ...this };
+		const testObject = this.#object;
 
 		// proxy to intercept property access and record the keys
 		const keys = [];
 		const proxy = new Proxy(testObject, {
 			get: (target, prop, receiver) => {
+				if (!testObject.hasOwnProperty(prop)) throw new ModelError(`'${prop}' does not exist in the model`);
+				if (typeof testObject[prop] === 'function') return function () { };// return an empty function to prevent side effects
 				keys.push(prop);
 				return Reflect.get(target, prop, receiver);
 			},
+			set: (target, prop, value, receiver) => {
+				return;
+			}
 		});
 
 		// execute the callback to determine dependencies
@@ -236,49 +251,45 @@ class Model {
  *
  * Just wrap a standard javascript object in `createModel`,
  * and you're good to go. All of the properties become reactive
- *   state automatically, and you get back a custom hook to use.
- *   This can be used in multiple components with no props or
- *   context wrapper. It can be exported and used by components
- *   anywhere, with no need to pass any around anything else.
- *   Update it from anywhere and it will rerender dependent components.
- *   You can also keep it in its own file and update it directly, outside
- *   of any react component.
+ * state automatically, and you get back a custom hook to use.
+ * This can be used in multiple components with no props or
+ * context wrapper. It can be exported and used by components
+ * anywhere, with no need to pass any around anything else.
+ * Update it from anywhere and it will rerender dependent components.
+ * You can also keep it in its own file and update it directly, outside
+ * of any react component.
  * @param {object} initialObject - the object to wrap
  * @param {object} options - options for the model
  * @returns {function} - a function used as a hook with attached methods for alternative behavior
  */
 export function createModel(initialObject, options) {
 	const model = new Model(initialObject, options);
-	/**
-	 * Watches for model property changes to the specified keys and triggers rerender when any change occurs
-	 * If no keys are provided, watches all properties
-	 * @param {array} keys - an array of model keys to watch
-	 * @returns {Model} - the model instance
-	 */
-	function methods(keys) {
-		return model.watch(keys);
-	}
 
 	/**
+	 * useModel
+	 *
 	 * lets you pick elements of the model or register functions executed against the model
-	 * watches all dependencies and triggers rerender when any change
-	 * you can pass a string denoting the property, a function, or a collection (array/object) of strings and functions
+	 * Triggers a rerender when a change to a dependency occurs
+	 * You can pass a string denoting the property, a function, or a collection (array/object) of strings and functions
 	 * Collections will be returned in the same format as the collection passed in
+	 * If {useModel}() is used without arguments, it returns the model as an object. To watch properties on that object, use `.watch()`
 	 *
 	 * @example
-	 * model.pick('key') // returns the value of `key` and watches for changes to `key`
-	 * model.pick((m) => m.key) // returns the value of `key` and watches for changes to `key`
-	 * model.pick(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
-	 * model.pick({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
+	 * {useModel}() // returns the model as an object. To watch properties, use `.watch()`
+	 * {useModel}('key') // returns the value of `key` and watches for changes to `key`
+	 * {useModel}((m) => m.key) // returns the value of `key` and watches for changes to `key`
+	 * {useModel}(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
+	 * {useModel}({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
 	 *
 	 * @param {string|function|array|object} arg
 	 * @returns {any}
 	 */
-	methods.pick = (args) => model.pick(args);
+	function methods(args) {
+		if (arguments.length > 1) throw new ModelError('Too many arguments provided to useModel. Did you wrap your collection?');
+		if (args === undefined) return model;
+		return model.pick(args);
+	}
 
-	/**
-	 * @returns {Model} - the model instance
-	 */
 	methods.get = () => model;
 
 	return methods;

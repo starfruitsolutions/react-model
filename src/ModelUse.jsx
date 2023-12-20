@@ -48,7 +48,7 @@ function Model() {
 	*   If an empty array is provided, it doesn't trigger a render at all, but you
 	*   can still use the functions, triggering renders elsewhere.
 	**/
-	const model = useTodoModel(['todo']);
+	const model = useTodoModel().watch(['todom']);
 	return (
 		<div>
 			{/* This is a button to test re-rendering. */}
@@ -69,15 +69,15 @@ function Pick() {
 	**/
 
 	// single picks
-	const todo = useTodoModel.pick('todo');
-	const todos = useTodoModel.pick((model) => model.todos);
+	const todo = useTodoModel('todo');
+	const todos = useTodoModel((model) => model.todos);
 
 	// collection picks
-	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel.pick([
+	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel([
 		'setTodo',
 		(model) => (value) => model.todo = value
 	]);
-	const { addTodo, clearTodos } = useTodoModel.pick({
+	const { addTodo, clearTodos } = useTodoModel({
 		addTodo: 'addTodo',
 		clearTodos: 'clearTodos'
 	});
