@@ -16,7 +16,6 @@ const useTodoModel = createModel({
 	todos: [],
 	todo: 'test todo',
 	setTodo(value) {
-		console.log('this', this)
 		this.todo = value;
 	},
 	addTodo() {
@@ -48,7 +47,7 @@ function Model() {
 	*   If an empty array is provided, it doesn't trigger a render at all, but you
 	*   can still use the functions, triggering renders elsewhere.
 	**/
-	const model = useTodoModel().watch(['todom']);
+	const model = useTodoModel().watch(['todo']);
 	return (
 		<div>
 			{/* This is a button to test re-rendering. */}

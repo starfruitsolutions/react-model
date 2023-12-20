@@ -9,6 +9,8 @@ class ModelError extends Error {
 	}
 }
 
+
+
 /**
  * Wraps a standard javascript object in a reactive model and exposes hooks for react
  * The model can be used in multiple components with no props or context wrapper
@@ -21,12 +23,12 @@ class ModelError extends Error {
 class Model {
 	#object; // the object being wrapped
 	#debug; // whether to log state changes
-	#listeners; // a map of listeners for each property
+	#listeners = {}; // a map of listeners for each property
+	#functionMemos = new Map(); // a set of memoized pick functions
 
 	constructor(object, { debug = false } = {}) {
 		this.#object = object;
 		this.#debug = debug;
-		this.#listeners = {};
 
 		// add all properties to the model
 		Object.keys(object).forEach((key) => this.#addProperty(key));
@@ -187,6 +189,11 @@ class Model {
 	 * @private
 	 */
 	#pickFunction(callback) {
+		// if the function has already been memoized, sync all dependencies and return the callback
+		if (this.#functionMemos.has(callback.toString())) {
+			this.#functionMemos.get(callback.toString()).forEach((key) => this.#sync(key));
+			return callback(this);
+		}
 
 		// clone our object to track property access
 		const testObject = this.#object;
@@ -211,6 +218,9 @@ class Model {
 		} catch (e) {
 			throw new Error('Failed to determine dependencies of a function \n\t' + callback + '\n' + e.message);
 		}
+
+		// memoize the function
+		this.#functionMemos.set(callback.toString(), keys);
 
 		// sync all dependencies
 		keys.forEach((key) => this.#sync(key));
