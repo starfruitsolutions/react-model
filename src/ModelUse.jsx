@@ -42,9 +42,10 @@ function ModelUse() {
 
 function Model() {
 	/**
-	*   If no "watch" array is provided it rerenders on all model property changes.
-	*   If it is provided, it only triggers a render for the properties specified.
-	*   If an empty array is provided, it doesn't trigger a render at all, but you
+	*   If {useModel}() is used without arguments, it returns the model as an object
+	*   If `.watch()` is used without an array it rerenders on all model property changes.
+	*   If `.watch()` is used with an array, it only triggers a render for the properties specified.
+	*   If `.watch()` is NOT used it doesn't trigger a render at all, but you
 	*   can still use the functions, triggering renders elsewhere.
 	**/
 	const model = useTodoModel().watch(['todo']);
@@ -61,11 +62,22 @@ function Model() {
 
 function Pick() {
 	/**
-	 * `.pick()` lets you pick elements of the model or register functions executed against the model.
-	 * It will automatically watch all dependencies and trigger rerender when any change to a dependency occurs.
-	 * You can pass it a propery key, a function, or a collection of strings and functions as an array or object
-	 * Collections will be returned in the same format as the collection you passed in
-	**/
+	 * if you do supply an argument, it lets you pick elements of the model or register functions executed against the model
+	 * Triggers a rerender when a change to a dependency occurs
+	 * You can pass a string denoting the property, a function, or a collection (array/object) of strings and functions
+	 * Collections will be returned in the same format as the collection passed in
+	 *
+	 * @example
+	 * // single
+	 * {useModel}('key') // returns the that `key`s value from the model and watches for changes to it (can also return functions)
+	 * {useModel}((model) => model.key) // callback supporting computed values or custom interactions. Dependencies are watched automatically.
+	 * // Collections
+	 * {useModel}(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
+	 * {useModel}({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
+	 *
+	 * @param {string|function|array|object} arg
+	 * @returns {any}
+	 */
 
 	// single picks
 	const todo = useTodoModel('todo');
