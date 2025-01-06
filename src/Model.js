@@ -21,13 +21,15 @@ class ModelError extends Error {
  * @private
  * */
 class Model {
-	#object; // the object being wrapped
+	#object; // the object being wrapped	
+	#initialState; // the initial state of the object
 	#debug; // whether to log state changes
 	#listeners = {}; // a map of listeners for each property
 	#functionMemos = new Map(); // a set of memoized pick functions
 
 	constructor(object, { debug = false } = {}) {
 		this.#object = object;
+		this.#initialState = JSON.parse(JSON.stringify(object));
 		this.#debug = debug;
 
 		// add all properties to the model
@@ -97,7 +99,7 @@ class Model {
 	#sync(key) {
 		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
 		if (typeof this[key] === 'function') return;
-		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this[key]); // eslint-disable-line
+		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this[key], () => this.#initialState[key]); // eslint-disable-line
 	}
 
 	/**
