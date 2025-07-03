@@ -1,17 +1,5 @@
 import {createModel} from './Model';
 
-/**
-*   Just wrap a standard javascript object in `createModel`,
-*   and you're good to go. All of the properties become reactive
-*   state automatically, and you get back a custom hook to use.
-*   This can be used in multiple components with no props or
-*   context wrapper. It can be exported and used by components
-*   anywhere, with no need to pass any around anything else.
-*   Update it from anywhere and it will rerender dependent components.
-*   You can also keep it in its own file and update it directly, outside
-*   of any react component.
-**/
-
 const useTodoModel = createModel({
 	todos: [],
 	todo: 'test todo',
@@ -41,12 +29,6 @@ function ModelUse() {
 }
 
 function Model() {
-	/**
-	*   If `.watch()` is used without an array it rerenders on all model property changes.
-	*   If `.watch()` is used with an array, it only triggers a render for the properties specified.
-	*   If `.watch()` is NOT used it doesn't trigger a render at all, but you
-	*   can still use the functions, triggering renders elsewhere.
-	**/
 	const model = useTodoModel.watch(['todo']);
 	return (
 		<div>
@@ -80,7 +62,7 @@ function Pick() {
 	 */
 
 	// single picks
-	const todo = useTodoModel('todo');
+	const todo = useTodoModel.pick('todo');
 	const todos = useTodoModel((model) => model.todos);
 
 	// collection picks

@@ -74,7 +74,7 @@ export class Model {
 	 * If used without an array it rerenders on all model property changes.
 	 * used with an array, it only triggers a render for the properties specified.
 	 * @param {array} keys - an array of model keys to watch
-	 * @returns {Model} - the model instance
+	 * @returns {object} - the model instance
 	 */
 	watch(keys) {
 		// validate keys
@@ -272,38 +272,24 @@ export class Model {
  * Update it from anywhere and it will rerender dependent components.
  * You can also keep it in its own file and update it directly, outside
  * of any react component.
+ * @typedef {((pick: string|function|array|object) => any) & Model} UseModel
  *
- * @template {object} T
- * @typedef {((pick: string | ((m: T) => any) | Array<string|((m: T) => any)> | {[key: string]: string|((m: T) => any)}) => any) & T & Model} ModelHook
- *
- * @param {T} initialObject - the object to wrap
+ * @param {object} initialObject - the object to wrap
  * @param {object} [options] - options for the model
- * @returns {ModelHook<T>} - a callable instance of Model with all model methods and properties
+ * @returns {UseModel} - a callable instance of Model with all model methods and properties
  */
 export function createModel(initialObject, options) {
 	const model = new Model(initialObject, options);
 
+	/**
+	 * We attach the pick function to the model instance as the main callable
+	 * @param {string|function|array|object} pick
+	 */
 	function useModel(pick) {
-		// make sure we have exactly one argument
 		if (arguments.length !== 1) throw new ModelError('useModel requires exactly one argument: a model key string, function, or array/object containing a collection of keys and functions');
+
 		return model.pick(pick);
 	}
-
-	// Proxy for callable + property access
-	const proxy = new Proxy(useModel, {
-		apply(target, thisArg, args) {
-			return target.apply(thisArg, args);
-		},
-		get(target, prop, receiver) {
-			// Always prefer the function's own properties (with docs!)
-			if (prop in target) return Reflect.get(target, prop, receiver);
-			if (prop in model) {
-				const value = model[prop];
-				return typeof value === 'function' ? value.bind(model) : value;
-			}
-			return undefined;
-		},
-	});
 
 	/**
 	 * Lets you pick elements of the model or register functions executed against the model.
@@ -320,7 +306,19 @@ export function createModel(initialObject, options) {
 	 * useModel.get() // returns the proxy object of the model for use outside of react components
 	 * useModel.watch() // returns the reactive model, watches all properties and triggers a rerender on any change
 	 *
-	 * @returns {ModelHook<T>} - a callable instance of Model with all model methods and properties
-	 */
-	return proxy;
+	 * @type {UseModel}
+	 **/
+	return new Proxy(useModel, {
+		apply(target, thisArg, args) {
+			return target.apply(thisArg, args);
+		},
+		get(target, prop, receiver) {
+			if (prop in target) return Reflect.get(target, prop, receiver);
+			if (prop in model) {
+				const value = model[prop];
+				return typeof value === 'function' ? value.bind(model) : value;
+			}
+			return undefined;
+		},
+	});
 }
