@@ -42,13 +42,12 @@ function ModelUse() {
 
 function Model() {
 	/**
-	*   If {useModel}() is used without arguments, it returns the model as an object
 	*   If `.watch()` is used without an array it rerenders on all model property changes.
 	*   If `.watch()` is used with an array, it only triggers a render for the properties specified.
 	*   If `.watch()` is NOT used it doesn't trigger a render at all, but you
 	*   can still use the functions, triggering renders elsewhere.
 	**/
-	const model = useTodoModel().watch(['todo']);
+	const model = useTodoModel.watch(['todo']);
 	return (
 		<div>
 			{/* This is a button to test re-rendering. */}
@@ -82,6 +81,7 @@ function Pick() {
 	// single picks
 	const todo = useTodoModel('todo');
 	const todos = useTodoModel((model) => model.todos);
+	console.log('todos', todos);
 
 	// collection picks
 	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel([

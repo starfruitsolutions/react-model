@@ -21,7 +21,8 @@ class ModelError extends Error {
  * @private
  * */
 class Model {
-	#object; // the object being wrapped	
+	#object; // the object being wrapped
+	#proxyObject; // the proxy object to intercept property access
 	#initialState; // the initial state of the object
 	#debug; // whether to log state changes
 	#listeners = {}; // a map of listeners for each property
@@ -29,14 +30,24 @@ class Model {
 
 	constructor(object, { debug = false } = {}) {
 		this.#object = object;
+		this.#proxyObject = {};
 		this.#initialState = JSON.parse(JSON.stringify(object));
 		this.#debug = debug;
 
 		// add all properties to the model
 		Object.keys(object).forEach((key) => this.#addProperty(key));
 
-		// freeze the object to prevent changes to this object that may produce side effects
+		// freeze this object to prevent changes to this object that may produce side effects
 		Object.freeze(this);
+
+	}
+
+	/**
+	 * Returns the proxy object for the model
+	 * @returns {object} - the proxy object
+	 */
+	getProxyObject() {
+		return this.#proxyObject;
 	}
 
 	/**
@@ -46,14 +57,14 @@ class Model {
 	 * @private
 	 **/
 	#addProperty(key) {
-		// functions are simply bound to the model
-		if (typeof this.#object[key] === 'function') return this[key] = this.#object[key].bind(this);
+		// functions are simply bound to the proxy object
+		if (typeof this.#object[key] === 'function') return this.#proxyObject[key] = this.#object[key].bind(this.#proxyObject);
 
 		// properties need to be watched for changes and have accessors bound
 		this.#listeners[key] = new Set();
 
 		// define a getter and setter for the property that emits a change event
-		Object.defineProperty(this, key, {
+		Object.defineProperty(this.#proxyObject, key, {
 			get: () => this.#object[key],
 			set: (value) => {
 				this.#object[key] = value;
@@ -99,7 +110,7 @@ class Model {
 	#sync(key) {
 		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
 		if (typeof this[key] === 'function') return;
-		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this[key], () => this.#initialState[key]); // eslint-disable-line
+		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this.#proxyObject[key], () => this.#initialState[key]); // eslint-disable-line
 	}
 
 	/**
@@ -179,9 +190,9 @@ class Model {
 	 */
 	#pickKey(key) {
 		//only sync if not a function
-		if (typeof this.#object[key] === 'function') return this.#object[key].bind(this);
+		if (typeof this.#proxyObject[key] === 'function') return this.#proxyObject[key].bind(this.#proxyObject);
 		this.#sync(key);
-		return this[key];
+		return this.#proxyObject[key];
 	}
 
 	/**
@@ -194,7 +205,7 @@ class Model {
 		// if the function has already been memoized, sync all dependencies and return the callback
 		if (this.#functionMemos.has(callback.toString())) {
 			this.#functionMemos.get(callback.toString()).forEach((key) => this.#sync(key));
-			return callback(this);
+			return callback(this.#proxyObject);
 		}
 
 		// clone our object to track property access
@@ -221,14 +232,16 @@ class Model {
 			throw new Error('Failed to determine dependencies of a function \n\t' + callback + '\n' + e.message);
 		}
 
+		if (this.#debug) console.log(`Function Dependencies: ${callback}`, keys);
+
 		// memoize the function
 		this.#functionMemos.set(callback.toString(), keys);
 
 		// sync all dependencies
 		keys.forEach((key) => this.#sync(key));
 
-		// return the callback with the model bound
-		return callback(this);
+		// return the callback with the proxy bound
+		return callback(this.#proxyObject);
 	}
 
 	/**
@@ -284,25 +297,27 @@ export function createModel(initialObject, options) {
 	 * Triggers a rerender when a change to a dependency occurs
 	 * You can pass a string denoting the property, a function, or a collection (array/object) of strings and functions
 	 * Collections will be returned in the same format as the collection passed in
-	 * If {useModel}() is used without arguments, it returns the model as an object. To watch properties on that object, use `.watch()`
 	 *
 	 * @example
-	 * {useModel}() // returns the model as an object. To watch properties, use `.watch()`
 	 * {useModel}('key') // returns the value of `key` and watches for changes to `key`
 	 * {useModel}((m) => m.key) // returns the value of `key` and watches for changes to `key`
 	 * {useModel}(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
 	 * {useModel}({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
+	 *
+	 * {useModel}.get() // returns the proxy object of the model for use outside of react components
+	 * {useModel}.watch() // returns the reactive model watches all properties and triggers a rerender on any change
 	 *
 	 * @param {string|function|array|object} arg
 	 * @returns {any}
 	 */
 	function methods(args) {
 		if (arguments.length > 1) throw new ModelError('Too many arguments provided to useModel. Did you wrap your collection?');
-		if (args === undefined) return model;
+		if (args === undefined) throw new ModelError('useModel requires a model key string, function, or array/object containing a collection of keys and functions');
 		return model.pick(args);
 	}
 
-	methods.get = () => model;
+	methods.get = () => model.getProxyObject();
+	methods.watch = (keys) => model.watch(keys);
 
 	return methods;
 
