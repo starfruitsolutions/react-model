@@ -5,11 +5,9 @@ class ModelError extends Error {
 		super(message);
 		this.name = "ModelError";
 		// keep the stack trace from litering the console it doesn't contain useful information and can be expanded regardless
-		this.stack = this.stack.split('\n')[0];
+		this.stack = this.stack?.split('\n')[0];
 	}
 }
-
-
 
 /**
  * Wraps a standard javascript object in a reactive model and exposes hooks for react
@@ -20,7 +18,7 @@ class ModelError extends Error {
  * @param {boolean} options.debug - whether to log state changes
  * @private
  * */
-class Model {
+export class Model {
 	#object; // the object being wrapped
 	#proxyObject; // the proxy object to intercept property access
 	#initialState; // the initial state of the object
@@ -30,12 +28,33 @@ class Model {
 
 	constructor(object, { debug = false } = {}) {
 		this.#object = object;
-		this.#proxyObject = {};
 		this.#initialState = JSON.parse(JSON.stringify(object));
 		this.#debug = debug;
 
 		// add all properties to the model
-		Object.keys(object).forEach((key) => this.#addProperty(key));
+		// Object.keys(object).forEach((key) => this.#addProperty(key));
+
+		this.#proxyObject = new Proxy(this.#object, {
+			get: (target, prop, receiver) => {
+				if (prop in target) {
+					return Reflect.get(target, prop, receiver);
+				}
+				throw new ModelError(`Property '${String(prop)}' does not exist on model`);
+			},
+			set: (target, prop, value, _receiver) => {
+				if (prop in target) {
+					target[prop] = value;
+					this.#emitChange(String(prop), value);
+					return true;
+				}
+				throw new ModelError(`Property '${String(prop)}' does not exist on model`);
+			}
+		});
+
+		// initialize listeners for each property
+		Object.keys(this.#object).forEach((key) => {
+			this.#listeners[key] = new Set();
+		});
 
 		// freeze this object to prevent changes to this object that may produce side effects
 		Object.freeze(this);
@@ -46,71 +65,8 @@ class Model {
 	 * Returns the proxy object for the model
 	 * @returns {object} - the proxy object
 	 */
-	getProxyObject() {
+	get() {
 		return this.#proxyObject;
-	}
-
-	/**
-	 * Adds a property to the model
-	 * @param {string} key - the property key
-	 * @returns {void}
-	 * @private
-	 **/
-	#addProperty(key) {
-		// functions are simply bound to the proxy object
-		if (typeof this.#object[key] === 'function') return this.#proxyObject[key] = this.#object[key].bind(this.#proxyObject);
-
-		// properties need to be watched for changes and have accessors bound
-		this.#listeners[key] = new Set();
-
-		// define a getter and setter for the property that emits a change event
-		Object.defineProperty(this.#proxyObject, key, {
-			get: () => this.#object[key],
-			set: (value) => {
-				this.#object[key] = value;
-				this.#emitChange(key, value);
-			}
-		});
-	}
-
-	/**
-	 * Emits a change event for the specified key
-	 * @param {string} key - the property key
-	 * @param {any} value - the new value
-	 * @returns {void}
-	 * @private
-	 * */
-	#emitChange(key, value) {
-		if (this.#debug) console.log(`State Change: ${key}`, value);
-		this.#listeners[key].forEach((listener) => listener());
-	}
-
-	/**
-	 * Subscribes to changes for the specified key
-	 * @param {string} key - the property key
-	 * @param {function} listener - the listener function
-	 * @returns {function} - a function to unsubscribe
-	 * @private
-	 * */
-	subscribe(key, listener) {
-		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
-
-		this.#listeners[key].add(listener);
-
-		// return a function to unsubscribe
-		return () => this.#listeners[key].delete(listener);
-	}
-
-	/**
-	 * Syncs the specified key with react using the useSyncExternalStore hook
-	 * @param {string} key - the property key
-	 * @returns {void}
-	 * @private
-	 * */
-	#sync(key) {
-		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
-		if (typeof this[key] === 'function') return;
-		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this.#proxyObject[key], () => this.#initialState[key]); // eslint-disable-line
 	}
 
 	/**
@@ -130,8 +86,9 @@ class Model {
 		// sync each key
 		keys.forEach((key) => this.#sync(key));
 
-		return this;
+		return this.#proxyObject;
 	}
+
 
 	/**
 	 * React hook that lets you pick elements of the model or register functions executed against the model
@@ -164,10 +121,46 @@ class Model {
 	}
 
 	/**
+	 * Subscribes to changes for the specified key
+	 * @param {string} key - the property key
+	 * @param {function} listener - the listener function
+	 * @returns {function} - a function to unsubscribe
+	 * */
+	subscribe(key, listener) {
+		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
+
+		this.#listeners[key].add(listener);
+
+		// return a function to unsubscribe
+		return () => this.#listeners[key].delete(listener);
+	}
+
+	/**
+	 * Emits a change event for the specified key
+	 * @param {string} key - the property key
+	 * @param {any} value - the new value
+	 * @returns {void}
+	 * */
+	#emitChange(key, value) {
+		if (this.#debug) console.log(`State Change: ${key}`, value);
+		this.#listeners[key].forEach((listener) => listener());
+	}
+
+	/**
+	 * Syncs the specified key with react using the useSyncExternalStore hook
+	 * @param {string} key - the property key
+	 * @returns {void}
+	 * */
+	#sync(key) {
+		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
+		if (typeof this[key] === 'function') return;
+		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this.#proxyObject[key], () => this.#initialState[key]); // eslint-disable-line
+	}
+
+	/**
 	 * Performs a single pick from the model
 	 * @param {string|function} pick - key or callback function
 	 * @returns {any}
-	 * @private
 	 */
 	#pickOne(pick) {
 		switch (typeof pick) {
@@ -186,7 +179,6 @@ class Model {
 	 * Picks a single key from the model
 	 * @param {string} key - the property key
 	 * @returns {any}
-	 * @private
 	 */
 	#pickKey(key) {
 		//only sync if not a function
@@ -199,7 +191,6 @@ class Model {
 	 * Picks a function from the model and syncs all dependencies
 	 * @param {function} callback - the callback function
 	 * @returns {any}
-	 * @private
 	 */
 	#pickFunction(callback) {
 		// if the function has already been memoized, sync all dependencies and return the callback
@@ -220,8 +211,8 @@ class Model {
 				keys.push(prop);
 				return Reflect.get(target, prop, receiver);
 			},
-			set: (target, prop, value, receiver) => {
-				return;
+			set: (_target, _prop, _value, _receiver) => {
+				return false;
 			}
 		});
 
@@ -232,7 +223,7 @@ class Model {
 			throw new Error('Failed to determine dependencies of a function \n\t' + callback + '\n' + e.message);
 		}
 
-		if (this.#debug) console.log(`Function Dependencies: ${callback}`, keys);
+		if (this.#debug) console.log(`Function Dependencies for: ${callback} \n`, keys);
 
 		// memoize the function
 		this.#functionMemos.set(callback.toString(), keys);
@@ -248,7 +239,6 @@ class Model {
 	 * An array collection of picks from the model
 	 * @param {array} picks - an array of keys or functions
 	 * @returns {array} - an array of the picks to destructure
-	 * @private
 	 */
 	#pickArray(picks) {
 		return picks.map((pick) => this.#pickOne(pick));
@@ -258,7 +248,6 @@ class Model {
 	 * Picks an object from the model
 	 * @param {object} picks - an object of keys or functions
 	 * @returns {object} - an object of the picks to destructure
-	 * @private
 	 */
 	#pickObject(picks) {
 		let exports = {};
@@ -283,42 +272,55 @@ class Model {
  * Update it from anywhere and it will rerender dependent components.
  * You can also keep it in its own file and update it directly, outside
  * of any react component.
- * @param {object} initialObject - the object to wrap
- * @param {object} options - options for the model
- * @returns {function} - a function used as a hook with attached methods for alternative behavior
+ *
+ * @template {object} T
+ * @typedef {((pick: string | ((m: T) => any) | Array<string|((m: T) => any)> | {[key: string]: string|((m: T) => any)}) => any) & T & Model} ModelHook
+ *
+ * @param {T} initialObject - the object to wrap
+ * @param {object} [options] - options for the model
+ * @returns {ModelHook<T>} - a callable instance of Model with all model methods and properties
  */
 export function createModel(initialObject, options) {
 	const model = new Model(initialObject, options);
 
-	/**
-	 * useModel
-	 *
-	 * lets you pick elements of the model or register functions executed against the model
-	 * Triggers a rerender when a change to a dependency occurs
-	 * You can pass a string denoting the property, a function, or a collection (array/object) of strings and functions
-	 * Collections will be returned in the same format as the collection passed in
-	 *
-	 * @example
-	 * {useModel}('key') // returns the value of `key` and watches for changes to `key`
-	 * {useModel}((m) => m.key) // returns the value of `key` and watches for changes to `key`
-	 * {useModel}(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
-	 * {useModel}({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
-	 *
-	 * {useModel}.get() // returns the proxy object of the model for use outside of react components
-	 * {useModel}.watch() // returns the reactive model watches all properties and triggers a rerender on any change
-	 *
-	 * @param {string|function|array|object} arg
-	 * @returns {any}
-	 */
-	function methods(args) {
-		if (arguments.length > 1) throw new ModelError('Too many arguments provided to useModel. Did you wrap your collection?');
-		if (args === undefined) throw new ModelError('useModel requires a model key string, function, or array/object containing a collection of keys and functions');
-		return model.pick(args);
+	function useModel(pick) {
+		// make sure we have exactly one argument
+		if (arguments.length !== 1) throw new ModelError('useModel requires exactly one argument: a model key string, function, or array/object containing a collection of keys and functions');
+		return model.pick(pick);
 	}
 
-	methods.get = () => model.getProxyObject();
-	methods.watch = (keys) => model.watch(keys);
+	// Proxy for callable + property access
+	const proxy = new Proxy(useModel, {
+		apply(target, thisArg, args) {
+			return target.apply(thisArg, args);
+		},
+		get(target, prop, receiver) {
+			// Always prefer the function's own properties (with docs!)
+			if (prop in target) return Reflect.get(target, prop, receiver);
+			if (prop in model) {
+				const value = model[prop];
+				return typeof value === 'function' ? value.bind(model) : value;
+			}
+			return undefined;
+		},
+	});
 
-	return methods;
-
+	/**
+	 * Lets you pick elements of the model or register functions executed against the model.
+	 * Triggers a rerender when a change to a dependency occurs.
+	 * You can pass a string denoting the property, a function, or a collection (array/object) of strings and functions.
+	 * Collections will be returned in the same format as the collection passed in.
+	 *
+	 * @example
+	 * useModel('key') // returns the value of `key` and watches for changes to `key`
+	 * useModel((m) => m.key) // returns the value of `key` and watches for changes to `key`
+	 * useModel(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
+	 * useModel({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
+	 *
+	 * useModel.get() // returns the proxy object of the model for use outside of react components
+	 * useModel.watch() // returns the reactive model, watches all properties and triggers a rerender on any change
+	 *
+	 * @returns {ModelHook<T>} - a callable instance of Model with all model methods and properties
+	 */
+	return proxy;
 }

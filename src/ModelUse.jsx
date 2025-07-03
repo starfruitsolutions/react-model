@@ -53,6 +53,7 @@ function Model() {
 			{/* This is a button to test re-rendering. */}
 			<button onClick={()=>model.todo = 'test todo'}>Test Re-Render</button>
 			<h2>model</h2>
+			todo: {model.todo}<br />
 			{/* Notice that we can set the property directly without any helper functions */}
 			<input type="text" value={model.todo} onChange={(e) => model.todo = e.target.value} /><br />
 		</div>
@@ -81,7 +82,6 @@ function Pick() {
 	// single picks
 	const todo = useTodoModel('todo');
 	const todos = useTodoModel((model) => model.todos);
-	console.log('todos', todos);
 
 	// collection picks
 	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel([
