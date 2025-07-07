@@ -77,11 +77,7 @@ export class Model {
 	 * @returns {object} - the model instance
 	 */
 	watch(keys) {
-		// validate keys
-		if (!(keys === undefined || Array.isArray(keys))) throw new ModelError('Watch requires an array of model keys');
-
-		// if no keys are provided, watch all properties
-		keys = keys ?? Object.keys(this.#listeners);
+		if (!Array.isArray(keys)) throw new ModelError('Watch requires an array of model keys');
 
 		// sync each key
 		keys.forEach((key) => this.#sync(key));
@@ -89,6 +85,17 @@ export class Model {
 		return this.#proxyObject;
 	}
 
+	/**
+	 * React hook that watches all model properties and triggers rerender when any change occurs
+	 * You generally want to avoid this as it will rerender on any change to the model
+	 * @returns {object} - the model instance
+	 */
+	watchAll() {
+		// sync each key
+		Object.keys(this.#listeners).forEach((key) => this.#sync(key));
+
+		return this.#proxyObject;
+	}
 
 	/**
 	 * React hook that lets you pick elements of the model or register functions executed against the model
@@ -283,29 +290,19 @@ export function createModel(initialObject, options) {
 
 	/**
 	 * We attach the pick function to the model instance as the main callable
-	 * @param {string|function|array|object} pick
+	 * @param {Array|undefined} keys
 	 */
-	function useModel(pick) {
-		if (arguments.length !== 1) throw new ModelError('useModel requires exactly one argument: a model key string, function, or array/object containing a collection of keys and functions');
+	function useModel(keys) {
+		// for no args return the model instance
+		if (keys === undefined) return model.get();
+		if (arguments.length > 1) throw new ModelError('useModel only accepts a single argument: an array containing a collection of keys to watch');
 
-		return model.pick(pick);
+		return model.watch(keys);
 	}
 
 	/**
-	 * Lets you pick elements of the model or register functions executed against the model.
-	 * Triggers a rerender when a change to a dependency occurs.
-	 * You can pass a string denoting the property, a function, or a collection (array/object) of strings and functions.
-	 * Collections will be returned in the same format as the collection passed in.
-	 *
-	 * @example
-	 * useModel('key') // returns the value of `key` and watches for changes to `key`
-	 * useModel((m) => m.key) // returns the value of `key` and watches for changes to `key`
-	 * useModel(['key1', 'key2']) // returns [key1, key2] and watches for changes to `key1` and `key2`
-	 * useModel({ key1: 'key1', key2: (m) => m.key2 }) // returns { key1: key1, key2: key2 } and watches for changes to `key1` and `key2`
-	 *
-	 * useModel.get() // returns the proxy object of the model for use outside of react components
-	 * useModel.watch() // returns the reactive model, watches all properties and triggers a rerender on any change
-	 *
+	 * This is the main export of the model, which can be used in components
+	 * It can be called like a function to get the model instance or watch specific keys
 	 * @type {UseModel}
 	 **/
 	return new Proxy(useModel, {

@@ -29,7 +29,7 @@ function ModelUse() {
 }
 
 function Model() {
-	const model = useTodoModel.watch(['todo']);
+	const model = useTodoModel(['todo']);
 	return (
 		<div>
 			{/* This is a button to test re-rendering. */}
@@ -63,14 +63,14 @@ function Pick() {
 
 	// single picks
 	const todo = useTodoModel.pick('todo');
-	const todos = useTodoModel((model) => model.todos);
+	const todos = useTodoModel.pick((model) => model.todos);
 
 	// collection picks
-	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel([
+	const [setTodoUsingModelMethod, setTodoUsingCallback] = useTodoModel.pick([
 		'setTodo',
 		(model) => (value) => model.todo = value
 	]);
-	const { addTodo, clearTodos } = useTodoModel({
+	const { addTodo, clearTodos } = useTodoModel.pick({
 		addTodo: 'addTodo',
 		clearTodos: 'clearTodos'
 	});
