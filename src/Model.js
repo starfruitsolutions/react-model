@@ -37,7 +37,12 @@ export class Model {
 		this.#proxyObject = new Proxy(this.#object, {
 			get: (target, prop, receiver) => {
 				if (prop in target) {
-					return Reflect.get(target, prop, receiver);
+					const value = Reflect.get(target, prop, receiver);
+					// If it's a function, bind it to the proxy so `this` refers to the proxy
+					if (typeof value === 'function') {
+						return value.bind(this.#proxyObject);
+					}
+					return value;
 				}
 				throw new ModelError(`Property '${String(prop)}' does not exist on model`);
 			},
