@@ -31,23 +31,29 @@ export class Model {
 		this.#initialState = JSON.parse(JSON.stringify(object));
 		this.#debug = debug;
 
-		// add all properties to the model
-		// Object.keys(object).forEach((key) => this.#addProperty(key));
-
 		this.#proxyObject = new Proxy(this.#object, {
 			get: (target, prop, receiver) => {
 				if (prop in target) {
 					const value = Reflect.get(target, prop, receiver);
 					// If it's a function, bind it to the proxy so `this` refers to the proxy
 					if (typeof value === 'function') {
-						return value.bind(this.#proxyObject);
+						// Memoize bound methods per property to preserve referential stability
+						if (this.#functionMemos.has(prop)) {
+							return this.#functionMemos.get(prop);
+						}
+						const bound = value.bind(this.#proxyObject);
+						this.#functionMemos.set(prop, bound);
+						return bound;
 					}
 					return value;
 				}
 				throw new ModelError(`Property '${String(prop)}' does not exist on model`);
 			},
 			set: (target, prop, value, _receiver) => {
-				if (prop in target) {
+				if (prop === '__proto__' || prop === 'prototype' || prop === 'constructor') {
+					throw new ModelError(`Setting '${String(prop)}' is not allowed`);
+				}
+				if (Object.prototype.hasOwnProperty.call(target, prop)) {
 					target[prop] = value;
 					this.#emitChange(String(prop), value);
 					return true;
@@ -76,8 +82,7 @@ export class Model {
 
 	/**
 	 * React hook that watches for model property changes to the specified keys and triggers rerender when any change occurs
-	 * If used without an array it rerenders on all model property changes.
-	 * used with an array, it only triggers a render for the properties specified.
+	 * Requires an array of keys; use watchAll() to watch all model properties.
 	 * @param {array} keys - an array of model keys to watch
 	 * @returns {object} - the model instance
 	 */
@@ -165,7 +170,7 @@ export class Model {
 	 * */
 	#sync(key) {
 		if (!this.#listeners.hasOwnProperty(key)) throw new ModelError(`'${key}' does not exist in the model`);
-		if (typeof this[key] === 'function') return;
+		if (typeof this.#object[key] === 'function') return;
 		useSyncExternalStore((listener) => this.subscribe(key, listener), () => this.#proxyObject[key], () => this.#initialState[key]); // eslint-disable-line
 	}
 
@@ -284,11 +289,14 @@ export class Model {
  * Update it from anywhere and it will rerender dependent components.
  * You can also keep it in its own file and update it directly, outside
  * of any react component.
- * @typedef {((pick: string|function|array|object) => any) & Model} UseModel
+ * @typedef {((keys?: Array<string>) => any) & Model} UseModel
+ * - Called with no arguments: returns the full model state object.
+ * - Called with an array of key strings: subscribes to those keys and returns their current values.
+ * - Throws if called with more than one argument or if the argument is not an array.
  *
  * @param {object} initialObject - the object to wrap
  * @param {object} [options] - options for the model
- * @returns {UseModel} - a callable instance of Model with all model methods and properties
+ * @returns {UseModel} - a callable that accepts an optional array of key strings to watch, combined with all model methods and properties
  */
 export function createModel(initialObject, options) {
 	const model = new Model(initialObject, options);
@@ -301,6 +309,7 @@ export function createModel(initialObject, options) {
 		// for no args return the model instance
 		if (keys === undefined) return model.get();
 		if (arguments.length > 1) throw new ModelError('useModel only accepts a single argument: an array containing a collection of keys to watch');
+		if (!Array.isArray(keys)) throw new ModelError('useModel(keys) requires an array of keys. Use .pick(key) for a single value or .watchAll() to watch all keys.');
 
 		return model.watch(keys);
 	}
